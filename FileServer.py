@@ -1,37 +1,54 @@
 from socket import *
 import sys
-from collections import deque
+from pathlib import Path
 
-queue = deque()
-
-#Recebe IP/hostname (ainda não sei exatamente qual dos dois ou se tem q ser os dois)
-#Recebe porta (Socket ID)
 if len(sys.argv) >= 3:
     server_name = sys.argv[1]
-    server_port = sys.argv[2]
+    server_port = int(sys.argv[2])
 
-socket_server = socket(AF_INET, SOCK_STREAM) #esse socket é para fazer a conexão TCP, não é (no momento) o que será usado para conectar com o client side, isso pode ser mudado no futuro se for necessário 
-socket_server.bind(server_name, server_port)
-socket_server.listen(1) #Esse 1 é o limite de conexões que podem ficar em espera enquanto o servidor esta busy, verificar qual o valor que será necessário colocar aqui
+socket_server = socket(AF_INET, SOCK_STREAM) #esse socket é para ficar ouvindo
+socket_server.bind((server_name, server_port))
+socket_server.listen(1)
 
 while(1):
 
    socket_connection, addr = socket_server.accept() #Fica bloqueado aqui até alguém se conectar
-
    buffer = b"" #byte type
 
    while b"\n" not in buffer:
-      chunk = socket_connection.recv(1024) #Quase ctz que esse valor 1024 precisa ser mudado, ver o pq
-
+      chunk = socket_connection.recv(1024)
       if (not chunk): #Só entra aqui se não recebeu nada do outro lado
         break
-
-      buffer += chunk # keep adding chunks to the buffer
-
+      buffer += chunk
 
    if b"\n" not in buffer:
-      print("Incomplete message received or no message at all")
+      print("Incomplete message received")
       socket_connection.close()
       continue
 
+   message_bytes, _, _, = buffer.partition(b"\n")
+   _, _, file_name_bytes = message_bytes.partition(b" ")
+   file_name = file_name_bytes.decode(encoding='UTF-8', errors='strict') # bytes to string 
+   
+   FILES_DIRECTORY = Path("server_files")
+   file_path = FILES_DIRECTORY/file_name
+
+   if file_path.exists():
+     code = '1'
+     code = code.encode("utf-8")
+     socket_connection.sendall(code)
+     with open(file_path, "rb") as file:
+       while True:
+        chunk = file.read(4096)
+
+        if not chunk:
+            break
+
+        socket_connection.sendall(chunk)
+   else:
+    code = '0'
+    code = code.encode("utf-8")
+    socket_connection.sendall(code)
     
+
+   socket_connection.close()
